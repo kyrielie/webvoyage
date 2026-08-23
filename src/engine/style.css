@@ -1,0 +1,518 @@
+/* ═══════════════════════════════════════════════════════════
+   webvoyage — style.css
+   Retro fixed-aspect-ratio point-and-click / VN engine styling.
+
+   Structural changes vs the original (see webvoyage-framework-plan.md §4):
+     1. Viewport-clipping fix — .scene-wrap gets an explicit height and
+        .scene gets a matching max-height, so a short/landscape viewport
+        letterboxes the whole frame instead of clipping the bottom off.
+     5. touch-action: manipulation on .scene — stops the browser's own
+        pinch/double-tap-zoom from stealing a tap meant for the game.
+     6. prefers-reduced-motion — scanlines/vignette-flicker/VHS-noise/
+        tooltip motion all get a reduced-motion variant.
+     + .tooltip.pinned / .coarse-pointer — CSS side of tooltip.js's
+       setPinned() and main.js's coarse-pointer class toggle (JS already
+       shipped these hooks; this file is what was missing to back them).
+═══════════════════════════════════════════════════════════ */
+
+/* ─── Reset ─────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ─── Theme ─────────────────────────────────────────────── */
+:root {
+  --glow-color: #d0f3ec;
+  --scanline-opacity: 0.06;
+  --scene-max: 900px;
+  --tooltip-border: #000;
+  --tooltip-bg: #ffbe0b;
+  --crt-bg: #000;
+}
+
+/* ─── Airport font ──────────────────────────────────────── */
+@font-face {
+  font-family: 'Frutiger';
+  font-style: normal;
+  font-weight: normal;
+  src: local('Frutiger'), url('font/Frutiger.woff') format('woff');
+}
+@font-face {
+  font-family: 'Frutiger Bold';
+  font-style: normal;
+  font-weight: normal;
+  src: local('Frutiger Bold'), url('font/Frutiger_bold.woff') format('woff');
+}
+
+/* ─── Body ──────────────────────────────────────────────── */
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--crt-bg);
+  font-family: "Frutiger", Courier, monospace;
+  cursor: auto;
+  /* Fixed retro window never reflows with the platform UI chrome */
+  overscroll-behavior: none;
+}
+
+/* Small pixel-art selection accent — cosmetic, harmless if unsupported */
+::selection {
+  background: var(--glow-color);
+  color: #000;
+}
+
+/* ─── CRT Scanlines ─────────────────────────────────────── */
+.scanlines {
+  position: fixed; inset: 0; z-index: 100; pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent, transparent 2px,
+    rgba(0,0,0, var(--scanline-opacity)) 2px,
+    rgba(0,0,0, var(--scanline-opacity)) 4px
+  );
+  animation: scanroll 8s linear infinite;
+}
+@keyframes scanroll {
+  from { background-position: 0 0; }
+  to   { background-position: 0 200px; }
+}
+
+/* ─── Vignette ──────────────────────────────────────────── */
+.vignette {
+  position: fixed; inset: 0; z-index: 99; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.75) 100%);
+}
+
+/* ─── Scene ─────────────────────────────────────────────── */
+/* §4 item 1: .scene-wrap now has an explicit height (not just 100vh with
+   body overflow:hidden) and .scene has a matching max-height, so a tall
+   scaled scene on a short/landscape viewport shrinks to fit — letterboxed
+   with the existing black background — instead of clipping off-screen. */
+.scene-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh; /* accounts for mobile browser chrome; falls back above */
+}
+
+.scene {
+  position: relative;
+  width: 100%;
+  max-width: var(--scene-max);
+  max-height: 100vh;
+  max-height: 100dvh;
+  aspect-ratio: var(--scene-aspect, auto);
+  user-select: none;
+  animation: flicker 6s infinite;
+  cursor: default;
+  overflow: hidden; /* clips vn-overlay to the layer-00 image frame */
+  /* §4 item 5: stop the browser's own pinch/double-tap-zoom intercepting
+     a tap meant for the game. */
+  touch-action: manipulation;
+}
+
+.scene.on-button {
+  cursor: pointer;
+}
+
+body:has(.scene.on-button) {
+  cursor: pointer;
+}
+
+@keyframes flicker {
+  0%, 95%, 100% { opacity: 1; }
+  96%            { opacity: 0.92; }
+  97%            { opacity: 1; }
+  98%            { opacity: 0.95; }
+}
+
+/* ─── Layer images ──────────────────────────────────────── */
+.layer {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+  image-rendering: pixelated;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+/* layer-00 is in-flow and sets the scene height; all other layers stack above it */
+#layer-00 { position: relative; }
+
+.layer:not(#layer-00) {
+  position: absolute;
+  top: 0; left: 0;
+  transition: filter 120ms ease, transform 60ms ease;
+}
+
+.layer.hovered {
+  filter:
+    brightness(1.2)
+    saturate(1.4)
+    drop-shadow(0 0  6px var(--glow-color))
+    drop-shadow(0 0 18px var(--glow-color))
+    drop-shadow(0 0 40px color-mix(in srgb, var(--glow-color) 50%, transparent));
+  transition: filter 120ms ease, transform 60ms ease;
+}
+
+@keyframes ambient-pulse {
+  0%   { filter: brightness(1.06); box-shadow: 0 0 12px 3px color-mix(in srgb, var(--glow-color) 33%, transparent); }
+  100% { filter: none;             box-shadow: none; }
+}
+.layer.pulsing {
+  animation: ambient-pulse 800ms ease forwards;
+}
+
+/* Press feedback — JS adds this class on click */
+.layer.pressed {
+  transform: scale(0.97) translateY(3px);
+  filter: brightness(0.85) !important;
+  transition: filter 40ms ease, transform 40ms ease;
+}
+
+/* ─── Tooltip ───────────────────────────────────────────── */
+.tooltip {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  padding: 6px 12px 7px;
+  background: var(--tooltip-bg);
+  border: 2px solid var(--tooltip-border);
+  color: var(--tooltip-border);
+  font-family: "Frutiger Bold", Courier, monospace;
+  font-size: 18px;
+  text-transform: capitalize;
+  white-space: nowrap;
+  border-radius: 2px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 150ms, transform 150ms;
+  display: flex;
+  align-items: center;
+}
+
+.tooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Pinned variant — pairs with tooltip.js's setPinned(true), used behind
+   @media (pointer: coarse) so a touch tooltip never ends up hidden under
+   the finger that triggered it. Fixed bottom bar instead of cursor-follow. */
+.tooltip.pinned {
+  left: 50% !important;
+  right: auto;
+  bottom: max(18px, env(safe-area-inset-bottom, 18px));
+  top: auto !important;
+  transform: translate(-50%, 6px);
+  max-width: calc(100vw - 32px);
+  white-space: normal;
+  text-align: center;
+  justify-content: center;
+}
+.tooltip.pinned.visible {
+  transform: translate(-50%, 0);
+}
+
+.icon-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.icon-label svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  flex-shrink: 0;
+  fill: #000;
+  padding: 2px;
+  outline: 1.5px solid #000;
+  box-sizing: content-box;
+}
+
+/* Slightly larger hit-affordance in the label icon on coarse pointers,
+   matching hit-test.js's forgiveness radius — cosmetic reinforcement,
+   not a functional hit target. */
+.coarse-pointer .icon-label svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   VHS TRANSIT OVERLAY
+═══════════════════════════════════════════════════════════ */
+
+#transit-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+#transit-overlay.transit-visible { opacity: 1; }
+
+#transit-overlay.transit-flash {
+  background: #111;
+  transition: background 60ms ease;
+}
+
+#transit-frame {
+  position: relative;
+  width: 100%;
+  max-width: var(--scene-max);
+}
+
+#transit-photo {
+  display: block;
+  width: 100%;
+  image-rendering: pixelated;
+  filter: saturate(0.65) contrast(1.1) brightness(0.88);
+  animation: photo-jitter 0.4s steps(1) infinite;
+}
+
+@keyframes photo-jitter {
+  0%, 82%  { transform: translate(0, 0); }
+  87%      { transform: translate(-2px, 1px); }
+  92%      { transform: translate(0, 0); }
+  96%      { transform: translate(1px, -1px); }
+  100%     { transform: translate(0, 0); }
+}
+
+#transit-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent, transparent 1px,
+    rgba(0,0,0,0.3) 1px,
+    rgba(0,0,0,0.3) 2px
+  );
+}
+
+#transit-noise {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  image-rendering: pixelated;
+  mix-blend-mode: screen;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 3;
+}
+
+#transit-tracking-band {
+  position: absolute;
+  left: 0; right: 0;
+  height: 8px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.5) 20%,
+    rgba(255,255,255,0.65) 50%,
+    rgba(255,255,255,0.5) 80%,
+    transparent 100%
+  );
+  mix-blend-mode: screen;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 4;
+  transition: opacity 40ms;
+  filter: blur(1px);
+}
+
+#transit-hud-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+#transit-label {
+  font-family: "Frutiger", Courier, monospace;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #888;
+}
+
+#transit-bar-wrap {
+  position: relative;
+  width: 40%;
+  max-width: 360px;
+  height: 5px;
+  background: #111;
+  border: 1px solid #333;
+  overflow: hidden;
+}
+
+#transit-bar-segments {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent calc(5% - 1px),
+    rgba(0,0,0,0.7) calc(5% - 1px),
+    rgba(0,0,0,0.7) 5%
+  );
+  z-index: 1;
+  pointer-events: none;
+}
+
+#transit-bar {
+  height: 100%;
+  width: 0%;
+  background: #fff;
+  transition: width 48ms linear;
+  will-change: width;
+}
+
+#transit-pct {
+  font-family: "Frutiger", Courier, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: #555;
+}
+
+/* ─── AIGA icon sprite ──────────────────────────────────── */
+.aiga-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  fill: currentColor;
+  overflow: visible;
+}
+.aiga-icon--sm  { width: 1.25rem; height: 1.25rem; }
+.aiga-icon--md  { width: 2rem;    height: 2rem;    }
+.aiga-icon--lg  { width: 3rem;    height: 3rem;    }
+.aiga-icon--yellow { color: #ffbe0b; }
+.aiga-icon--white  { color: #ffffff; }
+
+/* ─── Visual Novel text box ─────────────────────────────── */
+.vn-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  align-items: flex-end;
+}
+.vn-overlay.active { display: flex; }
+.vn-box {
+  position: relative;
+  width: 100%;
+  background: rgba(8, 8, 24, 0.6);
+  padding: 1.5rem 2.5rem 2rem;
+  padding-bottom: max(2rem, env(safe-area-inset-bottom, 2rem));
+  font-family: "Courier New", Courier, monospace;
+  font-size: clamp(0.9rem, 2.5vw, 1.15rem);
+  color: #ffffff;
+  cursor: pointer;
+  user-select: none;
+}
+.vn-text { min-height: 4.2em; line-height: 1.75; white-space: pre-wrap; }
+.vn-caret {
+  display: inline-block;
+  width: 0.55em; height: 1em;
+  background: #48aaff;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  animation: vn-blink 0.8s step-end infinite;
+}
+.vn-caret.hidden { display: none; }
+@keyframes vn-blink { 50% { opacity: 0; } }
+.vn-continue {
+  margin-top: 0.6rem;
+  font-size: 0.72rem;
+  color: #48aaff;
+  text-align: right;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.vn-continue.show { opacity: 1; }
+.vn-close {
+  position: absolute;
+  top: 0.5rem; right: 1rem;
+  background: none; border: none;
+  color: #ddeeff; font-size: 1.25rem;
+  cursor: pointer; line-height: 1; padding: 0;
+  /* Coarse-pointer target is smaller than 44px by default; pad hit area
+     without changing the visible glyph size. */
+}
+.vn-close:hover { color: #fff; }
+.coarse-pointer .vn-close {
+  padding: 12px;
+  top: 0; right: 0.25rem;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §4 item 6 — prefers-reduced-motion
+   Scanline roll, vignette-driven flicker, VHS noise jitter, and the
+   per-character typewriter cadence all get toned down. The typewriter
+   *sound* is gated in audio.js/vn-engine.js at the JS layer since CSS
+   can't touch WebAudio; this handles everything CSS can reach.
+═══════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .scanlines {
+    animation: none;
+  }
+  .scene {
+    animation: none;
+  }
+  #transit-photo {
+    animation: none;
+  }
+  .layer.hovered,
+  .layer:not(#layer-00),
+  .layer.pressed,
+  .tooltip,
+  .vn-continue {
+    transition: none;
+  }
+  .layer.pulsing {
+    animation: none;
+    filter: brightness(1.06);
+  }
+  .vn-caret {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Small-viewport tightening (letterboxed frame gets narrower than
+   --scene-max on phones in portrait — tighten VN box padding and
+   tooltip size to match rather than leaving desktop-scaled chrome).
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .vn-box {
+    padding: 1rem 1.25rem 1.5rem;
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 1.5rem));
+  }
+  .vn-text {
+    min-height: 3.4em;
+    line-height: 1.55;
+  }
+  .tooltip {
+    font-size: 15px;
+    padding: 5px 10px 6px;
+  }
+}

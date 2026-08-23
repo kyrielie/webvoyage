@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "pages": [
+    {
+      "id": "mainhall",
+      "title": "Airport — Main Hall",
+      "message": "You are standing in the main hall. Where to?",
+      "pulse": false,
+      "buttons": [
+        {
+          "layer": 1,
+          "icon": "departingflights",
+          "label": "Departures",
+          "href": "gate",
+          "transit": []
+        },
+        {
+          "layer": 2,
+          "icon": "information",
+          "label": "Info Desk",
+          "href": null,
+          "message": "The attendant shrugs. \"Everything is delayed today.\""
+        }
+      ]
+    },
+    {
+      "id": "gate",
+      "title": "Airport — Gate 12",
+      "buttons": [
+        {
+          "layer": 1,
+          "icon": "leftarrow",
+          "label": "Back",
+          "href": "back"
+        }
+      ]
+    }
+  ]
+}

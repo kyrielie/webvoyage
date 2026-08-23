@@ -1,0 +1,67 @@
+name: Deploy webvoyage
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Run pipeline tests
+        run: python -m pytest tests/ -v
+
+      - name: Build site
+        # airport.py build re-runs tree (build/ -> pages.json + images/),
+        # validates, renders HTML, and writes the Obsidian graph — all in
+        # one call. dist/ is deliberately gitignored (see .gitignore);
+        # this Action is the only place that ever needs it to exist.
+        run: |
+          mkdir -p dist
+          cp pages.json dist/pages.json 2>/dev/null || true
+          python src/pipeline/airport.py html pages.json dist
+          cp -r src/engine/* dist/
+          # images/ is authored separately (build/ -> images/ via `tree`,
+          # run locally by whoever maintains build/); copy it through if present.
+          [ -d images ] && cp -r images dist/images || true
+          [ -f sprite.svg ] && cp sprite.svg dist/sprite.svg || true
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
